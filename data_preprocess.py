@@ -4,10 +4,10 @@ import numpy as np
 import random
 
 SIGNALS = [
-	"body_acc_x"#, "body_acc_y", "body_acc_z",
-# 	"body_gyro_x", "body_gyro_y", "body_gyro_z",
-# 	"total_acc_x", "total_acc_y", "total_acc_z",
-# 	"body_acc_x", "body_acc_y", "body_acc_z"
+	"body_acc_x", "body_acc_y", "body_acc_z",
+	"body_gyro_x", "body_gyro_y", "body_gyro_z",
+	"total_acc_x", "total_acc_y", "total_acc_z",
+	"body_acc_x", "body_acc_y", "body_acc_z"
 ]
 
 #----------------------------------------------------------------------------------------#
@@ -83,7 +83,7 @@ def preprocess(para, data):
 #     for int in range(5):
 #         index = random.randint(0,7352)
 #         showplot([data[index], _median[index], _butterworth[index], _fft[index], _normalize[index]])
-    return _fft
+    return _butterworth
 
 def _read_csv(filename):    
 	return pd.read_csv(filename, delim_whitespace=True, header=None)
