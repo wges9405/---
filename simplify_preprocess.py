@@ -1,7 +1,90 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
+
+
+# Readme：
+# 使用前請先依據該.py的位置建立幾個資料夾如下：
+# ./???/???
+#   ├ simplify_preprocess.py
+#   ├ Data_allocation
+#   │   ├ arduino
+#   │   │    └ preprocessed
+#   │   └ smartphone
+#   │        └ preprocessed
+#   ├ Data_arduino
+#   └ Data_smartphone
+
+# 將.csv放置如下：
+# ./???/???
+#   ├ simplify_preprocess.py
+#   ├ Data_allocation
+#   │   ├ arduino
+#   │   │    ├ preprocessed
+#   │   │    ├ 0_sitting
+#   │   │    │    └ sitting_2020-04-23_13-39-07.csv
+#   │   │    ├ 1_standing
+#   │   │    │    └ standing_2020-04-23_13-42-31
+#   │   │    └ ....(arduino data)
+#   │   │         └ sitting_2020-04-23_13-39-07
+#   │   │
+#   │   └ smartphone
+#   │        ├ preprocessed
+#   │        ├ 0_walking
+#   │        │    ├ accelerometer.csv
+#   │        │    └ gyroscope.csv
+#   │        ├ 1_sitting
+#   │        │    ├ accelerometer.csv
+#   │        │    └ gyroscope.csv
+#   │        └ ....(smartphone data)
+#   │             ├ accelerometer.csv
+#   │             └ gyroscope.csv
+#   ├ Data_arduino
+#   └ Data_smartphone
+
+# 經過preprocess後如下:
+# ./???/???
+#   ├ simplify_preprocess.py
+#   ├ Data_allocation
+#   │   ├ arduino
+#   │   │    └ preprocessed
+#   │   │         ├ 0_sitting
+#   │   │         │    └ sitting_2020-04-23_13-39-07.csv
+#   │   │         ├ 1_standing
+#   │   │         │    └ standing_2020-04-23_13-42-31
+#   │   │         └ ....(arduino data)
+#   │   │              └ sitting_2020-04-23_13-39-07
+#   │   └ smartphone
+#   │        └ preprocessed
+#   │            ├ 0_walking
+#   │            │    ├ accelerometer.csv
+#   │            │    └ gyroscope.csv
+#   │            ├ 1_sitting
+#   │            │    ├ accelerometer.csv
+#   │            │    └ gyroscope.csv
+#   │            └ ....(smartphone data)
+#   │                 ├ accelerometer.csv
+#   │                 └ gyroscope.csv
+#   ├ Data_arduino
+#   │   ├ body_acc_en.txt
+#   │   ├ body_acc_x/y/z.txt
+#   │   ├ body_gyro_en.txt
+#   │   ├ body_gyro_x/y/z.txt
+#   │   ├ total_acc_en.txt
+#   │   ├ total_acc_x/y/z.txt
+#   │   └ y.txt
+#   └ Data_smartphone
+#       ├ body_acc_en.txt
+#       ├ body_acc_x/y/z.txt
+#       ├ body_gyro_en.txt
+#       ├ body_gyro_x/y/z.txt
+#       ├ total_acc_en.txt
+#       ├ total_acc_x/y/z.txt
+#       └ y.txt
+
+
+# In[ ]:
 
 
 from os import listdir, mkdir
@@ -10,6 +93,8 @@ from scipy import interpolate, signal
 import pandas as pd
 import numpy as np
 import shutil
+import math
+import os
 
 ACTIVITIES = {
     'walking'   :1,
@@ -22,7 +107,8 @@ ACTIVITIES = {
 SIGNALS = [
     "body_acc_x", "body_acc_y", "body_acc_z",
     "body_gyro_x", "body_gyro_y", "body_gyro_z",
-    "total_acc_x", "total_acc_y", "total_acc_z"
+    "total_acc_x", "total_acc_y", "total_acc_z",
+    "body_acc_en", "body_gyro_en", "total_acc_en"
 ]
 INTERPOLATE = ["nearest","zero","slinear","quadratic","cubic"] # interpolate function
 
@@ -32,10 +118,9 @@ GRAVITY = 9.80665                   # Gravitational constant
 g = 0.3                             # cutoff frequence of g
 cutoff = 20                         # cutoff frequence of output
 freq = 50                           # input frequence
-NewPath = '/preprocessed'
 
 
-# In[52]:
+# In[ ]:
 
 
 def Get_path():
@@ -49,11 +134,27 @@ def Get_path():
         else: print('Wrong!')
     print('\n------------------------------------------\n')
     
-    if source==1: document = '../Data_allocation/smartphone'
-    else: document = '../Data_allocation/arduino'
+    if source==1: document = './Data_allocation/smartphone'
+    else: document = './Data_allocation/arduino'
     return source, document
 
-def find_csv(source, document):
+def Find_doc(source, document):
+    documents = listdir(document)
+    removelist = list()
+    for d in documents:
+        fullpath = join(document, d)
+        if isfile(fullpath): removelist.append(d)
+        elif d=='preprocessed':   removelist.append(d)
+            
+    for d in removelist: documents.remove(d)
+    for index in range(len(documents)): documents[index] = document+'/'+documents[index]
+        
+    if documents==[]:
+        print(f'All data in {document} are preprocessed')
+        print('\n-------------------------------------------------------\n')
+    return documents
+    
+def Find_csv(source, document):
     if source==1: print('Data comes from Smartphone:')
     else: print('Data comes from Arduino:')
         
@@ -77,7 +178,7 @@ def find_csv(source, document):
     return files
 
 
-# In[53]:
+# In[ ]:
 
 
 def read_csv(file):
@@ -129,18 +230,12 @@ def genXYZ(data, activity):
         return data[1],data[0],data[2]
 
 def Load_data(source, paths):
-    Activity=0
+    Activity = ACTIVITIES[paths[0].split('/')[3].split('_')[1]]
     acce_data = []; acce_length = 0
     gyro_data = []; gyro_length = 0
 
+    
     if source==1:
-        while(Activity==0):
-            print("Please choose your activity:\n1) Walking\n2) Upstairs\n3) Downstairs\n4) Sitting\n5) Standing\n6) Laying")
-            temp = int(input())
-            if temp in range(1,7): Activity = temp
-            else: print('Wrong!')
-        print('\n------------------------------------------\n')
-        
         acce_data, acce_length = split_string_to_float(read_csv(paths[0]), source)
         gyro_data, gyro_length = split_string_to_float(read_csv(paths[1]), source)
 
@@ -151,9 +246,9 @@ def Load_data(source, paths):
 
 
     else:
-        Activity = ACTIVITIES[paths[0].split('/')[3].split('_')[0]]
         acce_data, acce_length, gyro_data, gyro_length = split_string_to_float(read_csv(paths[0]), source)
 
+    print(f'Activity: {Activity}')
     print(f'Data length of acceleration:\t{acce_length}')
 #     print(acce_data[0][:5])
 #     print(acce_data[1][:5])
@@ -167,7 +262,7 @@ def Load_data(source, paths):
     return Activity, acce_data, acce_length, gyro_data, gyro_length
 
 
-# In[54]:
+# In[ ]:
 
 
 def Interpolate(data, old_length, new_length, kind):    
@@ -180,22 +275,24 @@ def Interpolate(data, old_length, new_length, kind):
     
     return fx(new_samples), fy(new_samples), fz(new_samples)
 
-def MedianFilter(data):
+def MF(data):
     return signal.medfilt(data, 3)
 
-def LowPassButterworthFilter(cutoff, freq, data):
+def LPBWF(cutoff, freq, data):
     b,a = signal.butter(3, 2*cutoff/freq, btype='lowpass', analog=False, output='ba')
     return signal.filtfilt(b, a, data)
 
-def _split(samples, data):
+def euclidean_norm(data):
+    en = []
+    for x,y,z in zip(data[0], data[1], data[2]):
+        en.append( math.sqrt(x ** 2 + y ** 2 + z ** 2) )
+    return en
+
+def split(samples, data):
     after = []
     for index in range(samples):
         after.append( data[index*64:(index+2)*64] )
     return np.transpose(after, (0,1))
-    
-def Shape(data, length):
-    samples = int(length/64)-1
-    return _split(samples, data[0]), _split(samples, data[1]), _split(samples, data[2])
 
 def Preprocess(acce_data, acce_length, gyro_data, gyro_length):
     # interpolate
@@ -208,48 +305,58 @@ def Preprocess(acce_data, acce_length, gyro_data, gyro_length):
     
     
     # filt
-    _MF_acce = [MedianFilter(acce_data[0]), MedianFilter(acce_data[1]), MedianFilter(acce_data[2])]
-    _MF_gyro = [MedianFilter(gyro_data[0]), MedianFilter(gyro_data[1]), MedianFilter(gyro_data[2])]
+    _MF_acce = [MF(acce_data[0]), MF(acce_data[1]), MF(acce_data[2])]
+    _MF_gyro = [MF(gyro_data[0]), MF(gyro_data[1]), MF(gyro_data[2])]
 
-    _LPBWF_acce = [LowPassButterworthFilter(cutoff, freq, _MF_acce[0]),
-                   LowPassButterworthFilter(cutoff, freq, _MF_acce[1]),
-                   LowPassButterworthFilter(cutoff, freq, _MF_acce[2])]
-    _LPBWF_G = [LowPassButterworthFilter(g, freq, _MF_acce[0]),
-                LowPassButterworthFilter(g, freq, _MF_acce[1]),
-                LowPassButterworthFilter(g, freq, _MF_acce[2])]
-    _LPBWF_gyro = [LowPassButterworthFilter(cutoff, freq, _MF_gyro[0]),
-                   LowPassButterworthFilter(cutoff, freq, _MF_gyro[1]),
-                   LowPassButterworthFilter(cutoff, freq, _MF_gyro[2])]
+    _LPBWF_acce = [LPBWF(cutoff, freq, _MF_acce[0]),
+                   LPBWF(cutoff, freq, _MF_acce[1]),
+                   LPBWF(cutoff, freq, _MF_acce[2])]
+    _LPBWF_G    = [LPBWF(     g, freq, _MF_acce[0]),
+                   LPBWF(     g, freq, _MF_acce[1]),
+                   LPBWF(     g, freq, _MF_acce[2])]
+    _LPBWF_gyro = [LPBWF(cutoff, freq, _MF_gyro[0]),
+                   LPBWF(cutoff, freq, _MF_gyro[1]),
+                   LPBWF(cutoff, freq, _MF_gyro[2])]
     
-    # 'total_acc': The acceleration signal in standard gravity units 'g'.
-    # 'body_acc': The body acceleration signal obtained by subtracting the gravity from the total acceleration. 
-    # 'body_gyro': The angular velocity vector measured by the gyroscope for each window sample. The units are radians/second.     
-    total_acce_data = _LPBWF_acce
-    body_gyro_data = _LPBWF_gyro
-    body_acce_data = [_LPBWF_acce[0]-_LPBWF_G[0],
-                      _LPBWF_acce[1]-_LPBWF_G[1],
-                      _LPBWF_acce[2]-_LPBWF_G[2]]
+    # 6-axis
+    _total_acc = _LPBWF_acce  # The acceleration signal in standard gravity units 'g'.
+    _body_gyro = _LPBWF_gyro  # The angular velocity vector measured by the gyroscope for each window sample. The units are radians/second. 
+    _body_acc = [_LPBWF_acce[0]-_LPBWF_G[0], # The body acceleration signal obtained by subtracting the gravity from the total acceleration. 
+                 _LPBWF_acce[1]-_LPBWF_G[1],
+                 _LPBWF_acce[2]-_LPBWF_G[2]]
     
+    # Euclidean Norm
+    _total_acc_en = euclidean_norm(_total_acc)
+    _body_gyro_en = euclidean_norm(_body_gyro)
+    _body_acc_en  = euclidean_norm(_body_acc)
     
     # splite
     samples = int(data_length/64)-1
     print(f'{samples} samples')
-    total_acc = Shape(total_acce_data, data_length)
-    body_gyro = Shape(body_gyro_data, data_length)
-    body_acc = Shape(body_acce_data, data_length)
+    
+    # 6-axis
+    total_acc = [split(samples, _total_acc[0]), split(samples, _total_acc[1]), split(samples, _total_acc[2])]
+    body_gyro = [split(samples, _body_gyro[0]), split(samples, _body_gyro[1]), split(samples, _body_gyro[2])]
+    body_acc  = [split(samples, _body_acc[0]),  split(samples, _body_acc[1]),  split(samples, _body_acc[2])]
+    
+    # Euclidean Norm
+    total_acc_en = split(samples, _total_acc_en)
+    body_gyro_en = split(samples, _body_gyro_en)
+    body_acc_en  = split(samples, _body_acc_en)
     
     print('\n------------------------------------------\n')
-    return data_length, samples, body_acc, body_gyro, total_acc
+    return data_length, samples, body_acc, body_gyro, total_acc, body_acc_en, body_gyro_en, total_acc_en
 
 
-# In[55]:
+# In[ ]:
 
 
-def WriteSignal(source, activity, samples, body_acce, body_gyro, total_acce):
+def WriteSignal(source, activity, samples, body_acc, body_gyro, total_acc, body_acc_en, body_gyro_en, total_acc_en):
     document = ''
-    if source==1: document = '../Data_smartphone'
-    else: document = '../Data_arduino'
+    if source==1: document = './Data_smartphone'
+    else: document = './Data_arduino'
     print(f'Saving Data in:')
+    
 #     Save data
     index = 0
     for signal in SIGNALS:
@@ -260,12 +367,16 @@ def WriteSignal(source, activity, samples, body_acce, body_gyro, total_acce):
         # w 建&寫 / w+ 建&寫&讀 / r 讀 / r+ 讀&寫 / a 續寫 / a+續寫&讀 / b 二進位模式
         with open(filename, 'a') as f:
         
-            if index<=3: target = body_acce[index-1]
-            elif index<=6: target = body_gyro[index-4]
-            elif index<=9: target = total_acce[index-7]
+            if index<=3:    target = body_acc[index-1]
+            elif index<=6:  target = body_gyro[index-4]
+            elif index<=9:  target = total_acc[index-7]
+            elif index==10: target = body_acc_en
+            elif index==11: target = body_gyro_en
+            elif index==12: target = total_acc_en
             
             np.savetxt(f, target, fmt="%.6e")
             # %.6e 科學記號到小數第6位 / %d 整數 / %.2f 浮點數到小數第2位 / %s 字串
+    
     
 #     Save target
     y = np.empty(shape=(samples,1))
@@ -277,7 +388,7 @@ def WriteSignal(source, activity, samples, body_acce, body_gyro, total_acce):
     print('\n------------------------------------------\n')
 
 
-# In[56]:
+# In[ ]:
 
 
 def MoveFile(source, activity, files, document):
@@ -286,8 +397,8 @@ def MoveFile(source, activity, files, document):
     mkdir(f'{document}/{length}_{activity}')
 
     if source==1:
-        shutil.move(files[0], document+f'/{length}_{activity}')
-        shutil.move(files[1], document+f'/{length}_{activity}')
+        shutil.move(files[0], f'{document}/{length}_{activity}')
+        shutil.move(files[1], f'{document}/{length}_{activity}')
     else:
         shutil.move(files[0], document+f'/{length}_{activity}')
     
@@ -299,24 +410,23 @@ def MoveFile(source, activity, files, document):
     print('\n-------------------------------------------------------\n')
 
 
-# In[57]:
+# In[ ]:
 
 
 def main():
     Source, Document = Get_path()
-    Files = find_csv(Source, Document)
-    
-    while Files!=[]:
+    Documents = Find_doc(Source, Document)
+    while Documents!=[]:
+        Files = Find_csv(Source, Documents[0])
         Activity, acce_data, acce_length, gyro_data, gyro_length = Load_data(Source, Files)
-        data_length, samples, body_acc, body_gyro, total_acc = Preprocess(acce_data, acce_length, gyro_data, gyro_length)
-        WriteSignal(Source, Activity, samples, body_acc, body_gyro, total_acc)
-        MoveFile(Source, Activity, Files, Document+NewPath)
-        
-        if Source==1: break
-        else: Files = find_csv(Source, Document)
+        data_length, samples, body_acc, body_gyro, total_acc, body_acc_en, body_gyro_en, total_acc_en = Preprocess(acce_data, acce_length, gyro_data, gyro_length)
+        WriteSignal(Source, Activity, samples, body_acc, body_gyro, total_acc, body_acc_en, body_gyro_en, total_acc_en)
+        MoveFile(Source, Activity, Files, Document+'/preprocessed')
+        os.rmdir( Documents[0] )
+        Documents = Find_doc(Source, Document)
 
 
-# In[58]:
+# In[ ]:
 
 
 main()
